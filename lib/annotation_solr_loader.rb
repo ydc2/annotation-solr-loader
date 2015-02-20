@@ -1,46 +1,61 @@
   require 'rubygems'
   require 'json'
-  #require './manifest_parser.rb'
   require 'rsolr'
   require 'open-uri'
   require 'set'
+  require_relative 'annotation_solr_loader/manifest_parser.rb'
+  require_relative 'annotation_solr_loader/config/solr_connect_config.rb'
 
   class AnnotationSolrLoader
+
     def initialize
       @project_map = { 'hours' => 'Books of Hours', 'yaleCS' => 'Machine analysis', 'creatingEnglish' => 'Creating English Literature'}
       @project_map = { 'hours' => 'Books of Hours', 'yaleCS' => 'Machine analysis', 'creatingEnglish' => 'Creating English Literature', 'gratian' => 'Gratian\'s Decretum'}
       @valid_groups = ['hours', 'creatingEnglish', 'yaleCS', 'gratian']
     end
 
-    def load_all_annotations(path, manifest_lookup)
+    def load_all_annotations()
       exported_manifests_path = ENV['DESMM_MANIFESTS_PATH']
+      #puts 'path = ' + exported_manifests_path
       manifest_lookup = ManifestParser.new
       manifest_lookup.manifests_from_array("#{exported_manifests_path}/manifests.json")
-      #manifest_lookup.manifest_from_file("./manifests/WaltersMS34.json")
-      #manifest_lookup.manifest_from_file("./manifests/WaltersMS102.json")
-      # 2 params above need to be set here
+      manifest_lookup.manifest_from_file("#{exported_manifests_path}/WaltersMS34.json")
+      manifest_lookup.manifest_from_file("#{exported_manifests_path}/WaltersMS102.json")
+
       @jsonTagCat = JSON.parse(open("http://desmmtags.ydc2.yale.edu/services/getTagsSolrMappings.json").read)
       @all_tags = Set.new
       solr_data = Array.new
-      data = File.read(path)
+      data = File.read("#{exported_manifests_path}/annotations.json")
+
       begin
         json = JSON.parse(data)
       rescue Exception => e
         puts e.to_s
         exit(-1)
       end
+      puts 'json Parsed from annotations read'
       annotations = load_annotations(json)
+      puts 'annotations loaded: count = ' + annotations.count().to_s
+
+      i=0
       annotations.each do |id, annotation|
-        record = create_solr_record(annotation, manifest_lookup) unless !annotation['active']
-        solr_data.push(record)
+        unless !annotation['active']
+          i += 1
+          record = create_solr_record(annotation, manifest_lookup)
+          solr_data.push(record) unless record.nil?
+        end
       end
       add_to_solr(solr_data)
     end
 
     def load_single_annotation(annotation)
-      @all_tags = Set.new
-      puts 'In load_single_annotation'
+      #puts '1'
       #Delayed::Worker.logger.debug("Log Entry: " + 'async_update: annotated by: ' + annotation.annotatedBy.to_s)
+      puts 'annotation_active = ' + annotation.active.to_s
+      if !annotation.active
+        delete_from_solr annotation
+        return
+      end
       solr_data = Array.new
       # get the manifest info for this annotation into manifest_lookup
       manifest_lookup = ManifestParser.new
@@ -49,23 +64,19 @@
       annotation_attributes=annotation.attributes
       annotation_string = JSON.generate(annotation_attributes)
       annotation = JSON.parse(annotation_string)
-      #set  @jsonTagCat to hold solr mappings for any tags in resource_chars
+      #set @jsonTagCat to hold solr mappings for any tags in resource_chars
       @jsonTagCat = set_jsonTagCat annotation['resource']['chars']
-      puts '@jsonTagCat after call = ' + JSON.generate(@jsonTagCat)
       record = create_solr_record(annotation, manifest_lookup) unless !annotation['active']
-      puts 'back fron create_solr_record'
       solr_data.push(record)
-      puts 'solr_record: ' + record.to_s
       add_to_solr(solr_data)
     end
 
     def create_solr_record(annotation, manifest_lookup)
-      puts 'start of first record section'
       record = Hash.new
       record[:id] = annotation['@id'].gsub(/http:\/\/annotations.ydc2.yale.edu\/annotation\//, "")
       record[:annotation_id_s] = annotation['@id']
       group = annotation['permissions']['read'] & @valid_groups
-      exit if group.empty?
+      return if group.empty?
       record[:project_t] = @project_map[group[0]]
       record[:project_id_t] =  group[0]
       record[:text_t] = annotation['resource']['chars']
@@ -83,51 +94,46 @@
 
       record[:manifest_label_t] = manifest_lookup.manifest_label_map[annotation['manifest']]
       record[:manifest_label_s] = manifest_lookup.manifest_label_map[annotation['manifest']]
-      puts 'manifest 1'
       record[:canvas_label_t] = manifest_lookup.canvas_label_map[record[:canvas_s]]
       canvas_image = manifest_lookup.canvas_image_map[record[:canvas_s]]
-      if canvas_image.index("full/full").nil?
-        canvas_image += '/' unless canvas_image.end_with?('/')
-        canvas_image += 'full/full/0/native.jpg'
+      if !canvas_image.nil?
+      if !canvas_image.empty?
+          begin
+          if canvas_image.index("full/full").nil?
+            canvas_image += '/' unless canvas_image.end_with?('/')
+            canvas_image += 'full/full/0/native.jpg'
+          end
+          rescue
+            puts 'no canvas_image.index: canvas_image is nil: ' + canvas_image.nil?.to_s + "  and canvas_image.empty?: " + canvas_image.empty?.to_s
+          end
+        end
       end
       record[:iiif_canvas_image_s] = canvas_image
       anno_img = annotation_area_image(canvas_image, record[:on_s])
       record[:iiif_annotation_image_s] = anno_img unless anno_img.nil?
-      puts 'manifest 2'
       # Process data from Manifest
-      puts 'manifest2.5 manifiest_uri = ' + manifest_uri
       manifest = manifest_lookup.manifests[manifest_uri]
       manifest_label = manifest_lookup.manifest_label_map[manifest_uri]
       record[:manifest_s] = manifest_uri
       record[:manifest_label_t] = manifest_label
       record[:manifest_label_s] = manifest_label
       unless manifest.nil?
-        #record[:attribution_t] = manifest['attribution']
-        #record[:logo_s] = manifest['logo']
-        #record[:license_t] = manifest['license']
-        #test above for bulk load
-        record[:attribution_t] = manifest['manifest_json']['attribution']
-        record[:logo_s] = manifest['manifest_json']['logo']
-        record[:license_t] = manifest['manifest_json']['license']
+        record[:attribution_t] = manifest['attribution']
+        record[:logo_s] = manifest['logo']
+        record[:license_t] = manifest['license']
         add_related_items record, manifest
         add_metadata record, manifest
-        add_related_items record, manifest['manifest_json']
-        add_metadata record,manifest['manifest_json']
       end
-      puts 'manifest 3'
       #*********************************************************************************************
       # parse tags
       tags = Array.new
       if (record[:text_t])
         record[:text_t].scan(/\#\w*/).each { |m|
-          @all_tags.add(m)
-
           unless record[:project_id_t] == 'gratian'
             tag = m.gsub!(/\#/, '')
             # find the correct category/solr field based on the tag id
             thisTag = '#' + m
             if @jsonTagCat[thisTag].nil?
-              #@tagsNotManaged.push(thisTag)
               record['unclassified_t'] = tag
             end
             if !@jsonTagCat[thisTag].nil?
@@ -145,7 +151,6 @@
             if gratianTagIsTOC record[:text_t]
               solrValue = getSolrValueForGratian record [:text_t]
               writeSolrFields  'project_t', solrValue, record
-              i += 1
             end
           end   # unless project_id_t == 'gratian'
 
@@ -154,10 +159,10 @@
       end
       record[:text] = record.keys.join(' ')
       record = map_facet_fields(record)
+      #puts 'leaving create_solr_record'
       record
-      #@solr_data.push(record)
-
     end
+
     protected
 
     def add_metadata(record,manifest)
@@ -238,10 +243,9 @@
     end
 
     def getSolrValueForGratian (text_t)
-      puts 'Gratian tag = ' + text_t
+      return if text_t.nil?
       if text_t.start_with?('#')
         text_t = text_t[1..-1]
-        #puts "stripped #: " + text_t
       end
       text_t.gsub! '.', ':.'
       text_t = 'Gratian\'s Decretum:' + text_t
@@ -259,8 +263,8 @@
     def writeSolrFields(solrField, solrValue, record)
       workMap = ''
       solrValueArray = solrValue.split(":")
-      # begin iteration for solrfield
       solrValueArray.each do |solrValueSeg|
+        #puts 'solrValueSeg = ' + solrValueSeg
         record[solrField] = Array.new unless record[solrField]
         begin
           if workMap.empty?
@@ -276,29 +280,15 @@
       end
     end
 
-    def set_jsonTagCatSingle recordTextS
-      tagHash = Hash.new
-      puts 'recordText = ' + recordText
-      @jsonTagCat = ''
-      recordText.scan(/\#\w*/).each { |tag|
-        tag.gsub!(/#/, "")
-        puts 'tag = ' + tag
-        #tagURI = "http://desmmtags.ydc2.yale.edu/services/getSolrMappingsForSingleTag.json?tag=" + tag
-        tagURI = "http://localhost:3000/services/getSolrMappingsForSingleTag.json?tag=" + tag
-        puts 'tagURI = ' + tagURI
-        @jsonTagCat = JSON.parse(open(tagURI).read)
-        puts 'solrMappings = ' + JSON.generate(@jsonTagCat)
-      }
-    end
-
     def set_jsonTagCat recordText
-      tagSet = recordText.gsub(/#/,'')
-      tagSet.rstrip!.gsub!(/\s/,"%20")
-      #tagURI = "http://desmmtags.ydc2.yale.edu/services/getSolrMappingsForTagSet.json?tags=" + tagSet
-      tagURI = "http://localhost:3000/services/getSolrMappingsForTagSet.json?tags=" + tagSet
-
+      tagsIn = recordText.split(' ')
+      tagSet = ""
+      tagsIn.each do |tag|
+        tagSet.concat(tag + " ") if tag.start_with?("#")
+      end
+      tagSet.rstrip!.gsub!(/#/,'').gsub!(/\s/,"%20") unless tagSet.empty?
+      tagURI = SolrConnectConfig.get("tagUrl") + '?tags=' + tagSet
       @jsonTagCat = JSON.parse(open(tagURI).read)
-      @jsonTagCat
     end
 
     def load_annotations(json)
@@ -310,19 +300,27 @@
     end
 
     def add_to_solr(annotations)
-      url = 'http://vm-ydc2dev-01.its.yale.edu:8080/solr/desm-hours-blacklight'
-      #url = 'http://solr:desmm@ec2-54-91-21-213.compute-1.amazonaws.com:8983/solr/desmm-hours-blacklight'
-
+      url = SolrConnectConfig.get("solrUrl")
       puts "Loading #{url}"
       solr = RSolr.connect :url => url
       puts 'connection made'
+      puts 'annotations count = ' + annotations.count().to_s
       x = 0
-
       annotations.each_slice(1000) { |annotations|
         solr.add annotations
         solr.commit
         x += 1
         p x
       }
+    end
+
+    def delete_from_solr(annotation)
+      url = SolrConnectConfig.get("solrUrl")
+      puts "Loading #{url}"
+      solr = RSolr.connect :url => url
+      puts 'connection made'
+      solr.delete_by_id annotation['@id']
+      solr.commit
+      solr.commit
     end
   end

@@ -31,6 +31,7 @@ class ManifestParser
     manifest = JSON.parse(data)
     @manifests[manifest['@id']] = manifest
     map_manifest(manifest, 'file')
+    puts
   end
 
   def manifest_from_annotation(annotation)
@@ -38,28 +39,24 @@ class ManifestParser
     manifest_id = annotation.manifest.gsub(/http:\/\/manifests.ydc2.yale.edu\/manifest\//, "")
     manifest_id.gsub!(/.json/,"")
     puts 'manifest_id = ' + manifest_id
-    #manifest = Manifest.find("BeineckeMS748_5")
     manifest = Manifest.find(manifest_id)
-    puts 'manifest = '+ manifest.to_s
+    #puts 'manifest = '+ manifest.to_s
     #@manifests[manifest['@id']] = manifest
-    @manifests[manifest['manifest_json']['@id']] = manifest
+    @manifests[manifest['manifest_json']['@id']] = manifest.manifest_json
 
     manifest_hash_string = manifest.attributes
-  puts "new annotation's manifest ==> " + JSON.generate(manifest_hash_string)
-    map_manifest(manifest, 'annotation')
+  #puts "new annotation's manifest ==> " + JSON.generate(manifest_hash_string)
+    map_manifest(manifest.manifest_json, 'annotation')
     puts 'done with manifest_from_annotation'
   end
 
   protected
 
   def map_manifest(manifest, from)
-    puts manifest.to_s
-    puts 'label: ' +  manifest['label']
+    #puts manifest.to_s
+   # puts 'label: ' +  manifest['label']
     @manifest_label_map[ manifest['@id'] ] = manifest['label']
     sequences = manifest['sequences'] || Array.new
-    sequences = manifest.manifest_json['sequences'] if from == 'annotation'
-    #sequences = manifest.sequences if from == 'annotation'
-    puts 'sequences = ' + sequences.to_s
     sequences.each do |sequence|
       sequence['canvases'].each do |canvas|
         @canvas_label_map[ canvas['@id'] ] = canvas['label']
