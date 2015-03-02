@@ -40,7 +40,7 @@ class ManifestParser
     manifest_id.gsub!(/.json/,"")
     puts 'manifest_id = ' + manifest_id
     manifest = Manifest.find(manifest_id)
-    #puts 'manifest = '+ manifest.to_s
+    puts '**manifest = '+ manifest.to_s
     #@manifests[manifest['@id']] = manifest
     @manifests[manifest['manifest_json']['@id']] = manifest.manifest_json
 
