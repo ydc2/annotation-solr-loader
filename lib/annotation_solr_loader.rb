@@ -303,7 +303,7 @@
       url = SolrConnectConfig.get("solrUrl")
       puts "Loading #{url}"
       solr = RSolr.connect :url => url
-      puts 'connection made'
+      puts 'connection made for add/update'
       puts 'annotations count = ' + annotations.count().to_s
       x = 0
       annotations.each_slice(1000) { |annotations|
@@ -318,7 +318,7 @@
       url = SolrConnectConfig.get("solrUrl")
       puts "Loading #{url}"
       solr = RSolr.connect :url => url
-      puts 'connection made'
+      puts 'connection made for delete'
       solr.delete_by_id annotation['@id']
       solr.commit
       solr.commit
