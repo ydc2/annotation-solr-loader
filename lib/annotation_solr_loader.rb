@@ -320,6 +320,7 @@
       puts "Loading #{url} for delete"
       solr = RSolr.connect :url => url
       puts 'connection made for deletion'
+      puts 'annotation[@id] = ' + annotation['@id']
       solr.delete_by_id annotation['@id']
       solr.commit
     end
