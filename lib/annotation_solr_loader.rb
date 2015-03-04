@@ -53,6 +53,7 @@
       #Delayed::Worker.logger.debug("Log Entry: " + 'async_update: annotated by: ' + annotation.annotatedBy.to_s)
       puts 'annotation_active = ' + annotation.active.to_s
       if !annotation.active
+        puts 'going to delete_from_solr from load_single_annotation'
         delete_from_solr annotation
         return
       end
@@ -301,9 +302,9 @@
 
     def add_to_solr(annotations)
       url = SolrConnectConfig.get("solrUrl")
-      puts "Loading #{url}"
+      puts "Loading fort add/update#{url}"
       solr = RSolr.connect :url => url
-      puts 'connection made'
+      puts 'connection made for add/update'
       puts 'annotations count = ' + annotations.count().to_s
       x = 0
       annotations.each_slice(1000) { |annotations|
@@ -316,11 +317,10 @@
 
     def delete_from_solr(annotation)
       url = SolrConnectConfig.get("solrUrl")
-      puts "Loading #{url}"
+      puts "Loading #{url} for delete"
       solr = RSolr.connect :url => url
-      puts 'connection made'
+      puts 'connection made for deletion'
       solr.delete_by_id annotation['@id']
-      solr.commit
       solr.commit
     end
   end
