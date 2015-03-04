@@ -302,7 +302,7 @@
 
     def add_to_solr(annotations)
       url = SolrConnectConfig.get("solrUrl")
-      puts "Loading fort add/update#{url}"
+      puts "Loading for add/update#{url}"
       solr = RSolr.connect :url => url
       puts 'connection made for add/update'
       puts 'annotations count = ' + annotations.count().to_s
@@ -321,7 +321,8 @@
       solr = RSolr.connect :url => url
       puts 'connection made for deletion'
       puts 'annotation[@id] = ' + annotation['@id']
-      solr.delete_by_id annotation['@id']
+      response = solr.delete_by_id annotation['@id']
+      puts 'response = ' + response.to_s
       solr.commit
     end
   end
