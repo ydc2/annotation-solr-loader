@@ -16,7 +16,6 @@
 
     def load_all_annotations()
       exported_manifests_path = ENV['DESMM_MANIFESTS_PATH']
-      #puts 'path = ' + exported_manifests_path
       manifest_lookup = ManifestParser.new
       manifest_lookup.manifests_from_array("#{exported_manifests_path}/manifests.json")
       manifest_lookup.manifest_from_file("#{exported_manifests_path}/WaltersMS34.json")
@@ -33,9 +32,8 @@
         puts e.to_s
         exit(-1)
       end
-      puts 'json Parsed from annotations read'
       annotations = load_annotations(json)
-      puts 'annotations loaded: count = ' + annotations.count().to_s
+      #puts 'annotations loaded: count = ' + annotations.count().to_s
 
       i=0
       annotations.each do |id, annotation|
@@ -49,11 +47,8 @@
     end
 
     def load_single_annotation(annotation)
-      #puts '1'
       #Delayed::Worker.logger.debug("Log Entry: " + 'async_update: annotated by: ' + annotation.annotatedBy.to_s)
-      puts 'annotation_active = ' + annotation.active.to_s
       if !annotation.active
-        puts 'going to delete_from_solr from load_single_annotation'
         delete_from_solr annotation
         return
       end
@@ -160,7 +155,6 @@
       end
       record[:text] = record.keys.join(' ')
       record = map_facet_fields(record)
-      #puts 'leaving create_solr_record'
       record
     end
 
@@ -302,10 +296,9 @@
 
     def add_to_solr(annotations)
       url = SolrConnectConfig.get("solrUrl")
-      puts "Loading for add/update#{url}"
       solr = RSolr.connect :url => url
-      puts 'connection made for add/update'
-      puts 'annotations count = ' + annotations.count().to_s
+      #puts 'connection made for add/update'
+      #puts 'annotations count = ' + annotations.count().to_s
       x = 0
       annotations.each_slice(1000) { |annotations|
         solr.add annotations
@@ -317,12 +310,10 @@
 
     def delete_from_solr(annotation)
       url = SolrConnectConfig.get("solrUrl")
-      puts "Loading #{url} for delete"
       solr = RSolr.connect :url => url
-      puts 'connection made for deletion'
-      puts 'annotation[@id] = ' + annotation['@id']
-      response = solr.delete_by_id annotation['@id']
-      puts 'response = ' + response.to_s
+      #puts 'connection made for deletion by query'
+      #response = solr.delete_by_id annotation['@id']
+      response = solr.delete_by_query 'annotation_id_s:"' + annotation['@id'] + '"'
       solr.commit
     end
   end
