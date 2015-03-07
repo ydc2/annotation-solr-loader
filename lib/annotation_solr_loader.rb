@@ -12,6 +12,8 @@
       @project_map = { 'hours' => 'Books of Hours', 'yaleCS' => 'Machine analysis', 'creatingEnglish' => 'Creating English Literature'}
       @project_map = { 'hours' => 'Books of Hours', 'yaleCS' => 'Machine analysis', 'creatingEnglish' => 'Creating English Literature', 'gratian' => 'Gratian\'s Decretum'}
       @valid_groups = ['hours', 'creatingEnglish', 'yaleCS', 'gratian']
+      @solrUrl = SolrConnectConfig.get("solrUrl")
+      @tagUrl = SolrConnectConfig.get("tagUrl")
     end
 
     def load_all_annotations()
@@ -22,6 +24,8 @@
       manifest_lookup.manifest_from_file("#{exported_manifests_path}/WaltersMS102.json")
 
       @jsonTagCat = JSON.parse(open("http://desmmtags.ydc2.yale.edu/services/getTagsSolrMappings.json").read)
+      getTagsSolrMappingsUrl = @tagUrl + "/services/getTagsSolrMappings.json"
+      @jsonTagCat = JSON.parse(open( getTagsSolrMappingsUrl).read)
       @all_tags = Set.new
       solr_data = Array.new
       data = File.read("#{exported_manifests_path}/annotations.json")
@@ -69,7 +73,9 @@
 
     def create_solr_record(annotation, manifest_lookup)
       record = Hash.new
-      record[:id] = annotation['@id'].gsub(/http:\/\/annotations.ydc2.yale.edu\/annotation\//, "")
+      #record[:id] = annotation['@id'].gsub(/http:\/\/annotations.ydc2.yale.edu\/annotation\//, "")
+      last_index = annotation['@id'].rindex('/')
+      record[:id] = annotation['@id'][last_index+1..annotation['@id'].length]
       record[:annotation_id_s] = annotation['@id']
       group = annotation['permissions']['read'] & @valid_groups
       return if group.empty?
@@ -105,7 +111,7 @@
         end
       end
       record[:iiif_canvas_image_s] = canvas_image
-      anno_img = annotation_area_image(canvas_image, record[:on_s])
+      anno_img = annotation_area_image(canvas_image, record[:on_s], record)
       record[:iiif_annotation_image_s] = anno_img unless anno_img.nil?
       # Process data from Manifest
       manifest = manifest_lookup.manifests[manifest_uri]
@@ -194,10 +200,17 @@
       record[:related_item_label_t].push label
     end
 
-    def annotation_area_image(canvas_image, on)
+    def annotation_area_image(canvas_image, on, record)
       return nil if on.nil? or canvas_image.nil?
       url, fragment = on.split(/\#xywh=/)
       return nil if fragment.nil?
+      coords = fragment.split(',')
+      record[:iiif_x1_i] = coords[0]
+      record[:iiif_y1_i] = coords[1]
+      record[:iiif_x2_i] = coords[0].to_i + coords[2].to_i
+      record[:iiif_y2_i] = coords[1].to_i + coords[3].to_i
+      record[:iiif_w_i] = coords[2]
+      record[:iiif_h_i] = coords[3]
       canvas_image.sub(/full\/full/, "#{fragment}/full")
     end
 
@@ -282,9 +295,10 @@
         tagSet.concat(tag + " ") if tag.start_with?("#")
       end
       tagSet.rstrip!.gsub!(/#/,'').gsub!(/\s/,"%20") unless tagSet.empty?
-      tagURI = SolrConnectConfig.get("tagUrl") + '?tags=' + tagSet
-      @jsonTagCat = JSON.parse(open(tagURI).read)
+      tagUrl = @tagUrl + '/services/getSolrMappingsForTagSet.json?tags=' + tagSet
+      @jsonTagCat = JSON.parse(open(tagUrl).read)
     end
+
 
     def load_annotations(json)
       annotations = Hash.new
@@ -295,9 +309,8 @@
     end
 
     def add_to_solr(annotations)
-      url = SolrConnectConfig.get("solrUrl")
-      solr = RSolr.connect :url => url
-      #puts 'connection made for add/update'
+      #puts 'connection made for add/update to: ' + solrUrl.to_s
+      solr = RSolr.connect :url => @solrUrl
       #puts 'annotations count = ' + annotations.count().to_s
       x = 0
       annotations.each_slice(1000) { |annotations|
@@ -309,11 +322,11 @@
     end
 
     def delete_from_solr(annotation)
-      url = SolrConnectConfig.get("solrUrl")
-      solr = RSolr.connect :url => url
-      #puts 'connection made for deletion by query'
+      solr = RSolr.connect :url => @solrUrl
+      puts 'connection made for deletion by query'
       #response = solr.delete_by_id annotation['@id']
       response = solr.delete_by_query 'annotation_id_s:"' + annotation['@id'] + '"'
+      puts 'response = ' + response.to_s
       solr.commit
     end
   end
