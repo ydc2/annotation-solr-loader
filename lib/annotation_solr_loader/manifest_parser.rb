@@ -38,9 +38,9 @@ class ManifestParser
     puts 'in manifest_from_annotation'
     manifest_id = annotation.manifest.gsub(/http:\/\/manifests.ydc2.yale.edu\/manifest\//, "")
     manifest_id.gsub!(/.json/,"")
-    puts 'manifest_id = ' + manifest_id
+    #puts 'manifest_id = ' + manifest_id
     manifest = Manifest.find(manifest_id)
-    puts '**manifest = '+ manifest.to_s
+    #puts '**manifest = '+ manifest.to_s
     #@manifests[manifest['@id']] = manifest
     @manifests[manifest['manifest_json']['@id']] = manifest.manifest_json
 
@@ -80,9 +80,6 @@ class ManifestParser
       end
     elsif canvas['resources'] and canvas['resources'][0]
       url = canvas['resources'][0]['resource']['service']['@id']
-    end
-    if url.nil?
-      p canvas
     end
     return url
   end

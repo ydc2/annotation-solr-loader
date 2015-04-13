@@ -13,6 +13,7 @@
       @project_map = { 'hours' => 'Books of Hours', 'yaleCS' => 'Machine analysis', 'creatingEnglish' => 'Creating English Literature', 'gratian' => 'Gratian\'s Decretum'}
       @valid_groups = ['hours', 'creatingEnglish', 'yaleCS', 'gratian']
       @solrUrl = SolrConnectConfig.get("solrUrl")
+      puts 'connection made for add/update to: ' + @solrUrl.to_s
       @tagUrl = SolrConnectConfig.get("tagUrl")
     end
 
@@ -100,10 +101,11 @@
       canvas_image = manifest_lookup.canvas_image_map[record[:canvas_s]]
       if !canvas_image.nil?
       if !canvas_image.empty?
-          begin
+        begin
           if canvas_image.index("full/full").nil?
             canvas_image += '/' unless canvas_image.end_with?('/')
             canvas_image += 'full/full/0/native.jpg'
+            canvas_image.gsub!('native', 'default') if canvas_image.include?('stanford.edu')
           end
           rescue
             puts 'no canvas_image.index: canvas_image is nil: ' + canvas_image.nil?.to_s + "  and canvas_image.empty?: " + canvas_image.empty?.to_s
@@ -247,6 +249,9 @@
           url = resources['default']['@id'] if resources['default']
         end
       end
+
+      #url.gsub!('native', 'default') if url.include?('stanford.edu')
+
       return url
     end
 
@@ -309,7 +314,7 @@
     end
 
     def add_to_solr(annotations)
-      #puts 'connection made for add/update to: ' + solrUrl.to_s
+      puts 'connection made for add/update to: ' + @solrUrl.to_s
       solr = RSolr.connect :url => @solrUrl
       #puts 'annotations count = ' + annotations.count().to_s
       x = 0
