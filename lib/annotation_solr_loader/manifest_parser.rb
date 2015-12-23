@@ -19,19 +19,18 @@ class ManifestParser
     data = File.read(path)
     json = JSON.parse(data)
     json.each do |manifest|
+      #p  manifest['metadata']
       @manifests[manifest['manifest_json']['@id']] = manifest['manifest_json']
+      @manifests.each do |id, manifest|
+        map_manifest(manifest, 'array')
+      end
     end
-    @manifests.each do |id, manifest|
-      map_manifest(manifest, 'array')
-    end
-  end
-
+end
   def manifest_from_file(path)
     data = File.read(path)
     manifest = JSON.parse(data)
     @manifests[manifest['@id']] = manifest
     map_manifest(manifest, 'file')
-    puts
   end
 
   def manifest_from_annotation(annotation)
@@ -46,6 +45,7 @@ class ManifestParser
 
     manifest_hash_string = manifest.attributes
   #puts "new annotation's manifest ==> " + JSON.generate(manifest_hash_string)
+
     map_manifest(manifest.manifest_json, 'annotation')
     puts 'done with manifest_from_annotation'
   end
